@@ -1,0 +1,13 @@
+{
+  "name": "thegame",
+  "version": "0.0.1",
+  "description": "A simple Express.js app using Redis",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+    "redis": "^3.1.2"
+  }
+}
