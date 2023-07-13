@@ -1,0 +1,14 @@
+version: '3'
+services:
+  redis:
+    image: redis:7
+    volumes:
+      - ./data/redis:/data
+  app:
+    build: .
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports:
+      - 3000:3000
+    depends_on:
+      - redis
