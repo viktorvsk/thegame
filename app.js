@@ -87,10 +87,6 @@ app.put("/profile", authenticateToken, async (req, res) => {
   res.json(newUserParams)
 });
 
-// app.put("/profile", (req, res) => {
-//   res.json({message: "OK"})
-// });
-
 // Lobby
 
 // app.post("/sendChatMessage", (req, res) => {
