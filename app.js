@@ -1,5 +1,5 @@
 const express = require('express');
-const redis = require('redis');
+const { createClient } = require('redis');
 const crypto = require('crypto');
 
 const redisURL = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -7,94 +7,84 @@ const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
 
 const app = express();
 app.use(express.json());
-const client = redis.createClient(redisURL);
+const client = createClient({url: redisURL});
+client.connect();
+client.on('ready', () => { console.log("Connected!") });
+client.on('error', (err) => {  console.error(err) });
 
-function authenticateToken(req, res, next) {
+async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
+
 
   if (authHeader) {
     const token = authHeader.trim();
+    const email = await client.HGET("sessions", token);
+    const currentUser = await client.json.get(`users:${email}`)
 
-    client.hget("sessions", token, (err, value) => {
-
-      if (err) {
-        console.error(err);
-        return res.status(500).json({ error: 'Internal Server Error' });
-      }
-
-      if (typeof value !== "undefined" && value !== null) {
-        req.current_user = { email: value, token: token }
-        next();
-      } else {
-        res.sendStatus(401);
-      }
-    });
+    if (email && currentUser) {
+      req.currentUser = JSON.parse(currentUser);
+      next();
+    } else {
+      res.sendStatus(401);
+    }
 
   } else {
     res.sendStatus(401); // Unauthorized
   }
 }
 
-app.get('/', (req, res) => {
-  client.incr('visitors_count', (err, count) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Internal Server Error' });
-    }
-    
-    res.json({ visitors: count });
-  });
+app.get('/', async (req, res) => {
+  const count = await client.INCR("visitors_count");
+  res.json({ visitors: count });
 });
 
 // Account
 
-app.post("/requestOtp", (req, res) => {
+app.post("/requestOtp", async (req, res) => {
   const { email } = req.body;
   const token = crypto.randomUUID();
   const link = `${baseUrl}/signIn?email=${email}&token=${token}`
 
-  client.hset("otps", email, token, (err, value) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Internal Server Error' });
-    }
+  await client.HSET("otps", email, token);
 
-    res.json({message: link});
-  });
+  console.log(`TODO: this should be sent to user email ${email}: ${link}`);
 
+  res.json({message: "OTP successfully sent to your email!"});
 });
 
-app.get("/signIn", (req, res) => {
+app.get("/signIn", async (req, res) => {
   const { email, token } = req.query;
 
-  client.hget("otps", email, (err, value) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Internal Server Error' });
-    }
+  const foundToken = await client.HGET("otps", email);
 
-    if (value === token) {
-      const secret = crypto.randomUUID();
+  if (foundToken === token) {
+    const secret = crypto.randomUUID();
 
-      client.hdel("otps", email);
-      client.hset("sessions", secret, email)
+    await client.HDEL("otps", email);
+    await client.HSET("sessions", secret, email);
+    await client.json.set(`users:${email}`, "$", JSON.stringify({email: email}), "NX");
 
-      res.json({message: secret});
-    } else {
-      res.sendStatus(401)
-    }
-
-  });
+    res.json({message: secret});
+  } else {
+    res.sendStatus(401)
+  }
 
 });
 
-app.delete("/signOut", authenticateToken, (req, res) => {
-  client.hdel("sessions", req.current_user.token)
+app.delete("/signOut", authenticateToken, async (req, res) => {
+  await client.HDEL("sessions", req.currentUser.token)
   res.json({message: "OK"})
 });
 
-app.get("/profile", authenticateToken, (req, res) => {
-  res.json({message: req.current_user})
+app.get("/profile", authenticateToken, async (req, res) => {
+  res.json(req.currentUser)
+});
+
+app.put("/profile", authenticateToken, async (req, res) => {
+  const newUserParams = {...req.body, email: req.currentUser.email};
+  await client.json.set(`users:${req.currentUser.email}`, "$", JSON.stringify(newUserParams));
+
+  res.json(newUserParams)
 });
 
 // app.put("/profile", (req, res) => {
