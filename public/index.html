@@ -1,0 +1,32 @@
+<html>
+<head>
+  <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.x.x/dist/cdn.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/app.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+</head>
+<body x-data="App">
+  <div class="container">
+    <div class="content m-6">
+      <div class="box">
+
+      <template x-if="!token"> 
+        <div class="field">
+          <div class="control">
+            <input class="input" placeholder="Paste token" type="text" x-model="token">
+          </div>
+        </div>
+      </template>
+
+      <template x-if="token">
+        <div>
+          <button class="button is-danger mb-2" x-on:click="token = null">Reset token</button>
+          <pre x-text="JSON.stringify(user)"></pre>
+        </div>
+      </template>
+
+      </div>
+    </div>
+  </div>
+</body>
+</html>

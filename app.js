@@ -7,6 +7,7 @@ const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
 
 const app = express();
 app.use(express.json());
+app.use(express.static('public'))
 const client = createClient({url: redisURL});
 client.connect();
 client.on('ready', () => { console.log("Connected!") });
@@ -33,7 +34,7 @@ async function authenticateToken(req, res, next) {
   }
 }
 
-app.get('/', async (req, res) => {
+app.get('/counter', async (req, res) => {
   const count = await client.INCR("visitors_count");
   res.json({ visitors: count });
 });
