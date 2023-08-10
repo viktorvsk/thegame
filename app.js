@@ -73,7 +73,8 @@ app.get("/signIn", async (req, res) => {
 });
 
 app.delete("/signOut", authenticateToken, async (req, res) => {
-  await client.HDEL("sessions", req.currentUser.token)
+  const authHeader = req.headers['authorization'];
+  await client.HDEL("sessions", authHeader.trim())
   res.json({message: "OK"})
 });
 
