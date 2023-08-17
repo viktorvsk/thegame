@@ -1,0 +1,65 @@
+<html>
+<head>
+  <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.x.x/dist/cdn.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="Lobby.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+</head>
+<body x-data="Lobby">
+
+  <nav class="navbar" role="navigation" aria-label="main navigation">
+    <div class="navbar-brand">
+      <a class="navbar-item" href="/">
+        T H E G A M E
+      </a>
+    </div>
+
+    <div id="navbarBasicExample" class="navbar-menu">
+      <div class="navbar-start">
+        <a class="navbar-item" href=/profile>Profile</a>
+      </div>
+
+      <div class="navbar-end">
+        <div class="navbar-item">
+          <div class="buttons">
+            <a class="button is-danger" href="/sign-out">
+              <strong>Sign out</strong>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container is-fluid">
+    <div class="content m-6">
+      <div class="columns">
+        <div class="column">
+          <h1>Stats</h1>
+          <div class="box">
+          </div>
+        </div>
+
+        <div class="column">
+          <h1>Chat</h1>
+          <div id=messages class="box">
+          </div>
+
+          <div class="field">
+            <div class="control">
+              <input name=email class="input" placeholder="email@example.com" type="text">
+            </div>
+          </div>
+        </div>
+
+        <div class="column">
+          <h1>Users</h1>
+          <div class="box">
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</body>
+</html>
