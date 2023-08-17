@@ -2,37 +2,50 @@ const express = require('express');
 const { createClient } = require('redis');
 const crypto = require('crypto');
 
+const SECRET = crypto.randomUUID();
+
 const redisURL = process.env.REDIS_URL || 'redis://localhost:6379';
 const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
 
 const app = express();
+const http = require('http');
+const server = http.createServer(app);
+const WebSocket = require('ws');
+const bodyParser = require('body-parser');
+const cookieParser = require('cookie-parser');
+
 app.use(express.json());
 app.use(express.static('public'))
+app.use(cookieParser(SECRET))
+app.use(bodyParser.urlencoded({ extended: true }));
+
 const client = createClient({url: redisURL});
 client.connect();
 client.on('ready', () => { console.log("Connected!") });
 client.on('error', (err) => {  console.error(err) });
 
 async function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
+  const sessionId = req.signedCookies.sid;
 
-
-  if (authHeader) {
-    const token = authHeader.trim();
-    const email = await client.HGET("sessions", token);
+  if (sessionId) {
+    const email = await client.HGET("sessions", sessionId);
     const currentUser = await client.json.get(`users:${email}`)
 
     if (email && currentUser) {
       req.currentUser = JSON.parse(currentUser);
       next();
     } else {
-      res.sendStatus(401);
+      res.redirect("/login");
     }
 
   } else {
-    res.sendStatus(401); // Unauthorized
+    res.redirect("/login");
   }
 }
+
+app.get("/", authenticateToken, async (req, res) => {
+  res.redirect('/lobby')
+});
 
 app.get('/counter', async (req, res) => {
   const count = await client.INCR("visitors_count");
@@ -48,9 +61,7 @@ app.post("/requestOtp", async (req, res) => {
 
   await client.HSET("otps", email, token);
 
-  console.log(`TODO: this should be sent to user email ${email}: ${link}`);
-
-  res.json({message: "OTP successfully sent to your email!"});
+  res.json({message: `OTP successfully sent to your email ${email}!`, link});
 });
 
 app.get("/signIn", async (req, res) => {
@@ -59,30 +70,40 @@ app.get("/signIn", async (req, res) => {
   const foundToken = await client.HGET("otps", email);
 
   if (foundToken === token) {
-    const secret = crypto.randomUUID();
+    const sessionId = crypto.randomUUID();
 
     await client.HDEL("otps", email);
-    await client.HSET("sessions", secret, email);
-    await client.json.set(`users:${email}`, "$", JSON.stringify({email: email}), "NX");
+    await client.HSET("sessions", sessionId, email);
+    await client.SADD()
+    await client.json.set(`users:${email}`, "$", JSON.stringify({email: email, sessionId: sessionId}), {"NX": true});
 
-    res.json({message: secret});
+    await client.pubslish("active_users", email)
+
+    let options = {
+        maxAge: 1000 * 60 * 15, // 15 minutes
+        httpOnly: true,
+        signed: true
+    }
+
+    res.cookie('sid', sessionId, options);
+    res.redirect('/');
   } else {
     res.sendStatus(401)
   }
 
 });
 
-app.delete("/signOut", authenticateToken, async (req, res) => {
-  const authHeader = req.headers['authorization'];
-  await client.HDEL("sessions", authHeader.trim())
-  res.json({message: "OK"})
+app.get("/sign-out", authenticateToken, async (req, res) => {
+  await client.HDEL("sessions", req.signedCookies.sid);
+  res.clearCookie('sid');
+  res.redirect('/');
 });
 
-app.get("/profile", authenticateToken, async (req, res) => {
+app.get("/userProfile", authenticateToken, async (req, res) => {
   res.json(req.currentUser)
 });
 
-app.put("/profile", authenticateToken, async (req, res) => {
+app.put("/userProfile", authenticateToken, async (req, res) => {
   const newUserParams = {...req.body, email: req.currentUser.email};
   await client.json.set(`users:${req.currentUser.email}`, "$", JSON.stringify(newUserParams));
 
@@ -129,10 +150,58 @@ app.put("/profile", authenticateToken, async (req, res) => {
 //   res.json({message: "OK"})
 // });
 
-app.listen(3000, () => {
-  console.log('Server is running on port 3000');
+const wss = new WebSocket.Server({ server });
+
+// Handle WebSocket connections WIP
+wss.on('connection', async (ws, req) => {
+    let email;
+
+    console.log('WebSocket connection established');
+
+    const sessionId = require('url').parse(req.url).query.split("=")[1];
+    email = await client.HGET("sessions", sessionId);
+    const currentUser = await client.json.get(`users:${email}`)
+
+    // TODO: something weird
+    // const ttt = JSON.stringify(currentUser);
+    // console.log(ttt)
+    // console.log(typeof ttt)
+    // console.log(JSON.parse(ttt))
+    // console.log(Object.keys(JSON.parse(ttt)))
+
+    if (email && currentUser) {
+      await client.SADD("active_users", email);
+    } else {
+      ws.close(3401, "user not found");
+    }
+
+    // TODO: WIP
+    // client.subscribe("active_users", (message) => {
+    //   ws.send(message);
+    // })
+
+
+    // console.log(currentUser)
+
+    // Handle incoming WebSocket messages
+    ws.on('message', (message) => {
+        console.log(`Received: ${message}`);
+        // You can do something with the message and send a response if needed
+        ws.send(`You said: ${message}`);
+
+    });
+
+    // Handle WebSocket disconnections
+    ws.on('close', async () => {
+      await client.SREM("active_users", email);
+        console.log('WebSocket connection closed');
+    });
 });
 
+
+server.listen(3000, () => {
+    console.log(`Server is running on port 3000`);
+});
 
 
 /// cURL
